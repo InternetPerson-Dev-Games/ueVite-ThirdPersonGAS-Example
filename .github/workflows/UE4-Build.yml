@@ -27,7 +27,7 @@ jobs:
           path: a
           lfs: true
 
-      # 3️⃣ Map UE4 to drive X: (Fix MAX_PATH)
+      # 3️⃣ Map UE4 to drive X:
       - name: Map UE4 to X drive
         shell: cmd
         run: subst X: %GITHUB_WORKSPACE%\a
