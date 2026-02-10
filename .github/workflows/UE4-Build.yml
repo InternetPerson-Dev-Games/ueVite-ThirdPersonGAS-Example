@@ -1,6 +1,9 @@
-name: UE4 Minimal Engine + Project Build (Cached)
+name: UE4 Build Clean
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -8,73 +11,31 @@ jobs:
     runs-on: windows-latest
 
     steps:
-
-      # Enable Long Paths
-      - name: Enable Windows long paths
-        shell: powershell
-        run: |
-          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
-          -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
-
-      - name: Enable git long paths
-        run: git config --system core.longpaths true
-
-      # Checkout UE4
-      - name: Checkout UE4.27
+      - name: Checkout UE4
         uses: actions/checkout@v4
         with:
           repository: AlexMercer-MA/UnrealEngine-4.27
           path: a
           lfs: true
 
-      # Map to X: drive
-      - name: Map UE4 to X drive
+      - name: Map drive
         shell: cmd
         run: subst X: %GITHUB_WORKSPACE%\a
 
-      # ✅ Fixed cache step
-      - name: Restore UE4 Cache
-        uses: actions/cache@v4
-        with:
-          path:
-            - a/Engine/Binaries
-            - a/Engine/Intermediate
-            - a/Engine/DerivedDataCache
-          key: ue4-${{ github.sha }}
-          restore-keys:
-            - ue4-
-
-      # Setup UE4 dependencies
       - name: Setup UE4
         shell: cmd
         run: |
           cd /d X:\
           Setup.bat -exclude=Mac -exclude=Linux -exclude=Android -exclude=IOS -exclude=TVOS -exclude=WinRT -exclude=HTML5
 
-      # Generate Project Files
       - name: Generate Project Files
         shell: cmd
         run: |
           cd /d X:\
           GenerateProjectFiles.bat
 
-      # Build UE4Game
       - name: Build UE4Game
         shell: cmd
         run: |
           cd /d X:\
           Engine\Build\BatchFiles\Build.bat UE4Game Win64 Development -NoDebugInfo -NoHotReload
-
-      # Checkout Project
-      - name: Checkout Project
-        uses: actions/checkout@v4
-        with:
-          repository: ViteStudio-Tech/ueVite-ThirdPersonGAS-Example
-          path: p
-          lfs: true
-
-      # Build Project
-      - name: Build Project Game Target
-        shell: cmd
-        run: |
-          X:\Engine\Build\BatchFiles\Build.bat ActionRPG Win64 Development -Project="%GITHUB_WORKSPACE%\p\ActionRPG - Vite\ActionRPG.uproject" -NoDebugInfo -NoHotReload
