@@ -12,51 +12,107 @@ jobs:
 
     steps:
 
-      - name: Enable Windows long paths
-        shell: powershell
-        run: |
-          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+    # -------------------------------------------------
+    # Enable long paths (Windows + Git)
+    # -------------------------------------------------
+    - name: Enable Windows long paths
+      shell: powershell
+      run: |
+        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
           -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
 
-      - name: Enable git long paths
-        run: git config --system core.longpaths true
+    - name: Enable git long paths
+      run: git config --system core.longpaths true
 
-      - name: Checkout UE4
-        uses: actions/checkout@v4
-        with:
-          repository: AlexMercer-MA/UnrealEngine-4.27
-          path: a
-          lfs: true
+    # -------------------------------------------------
+    # Checkout UE4 Source (your fork)
+    # -------------------------------------------------
+    - name: Checkout UE4
+      uses: actions/checkout@v4
+      with:
+        repository: AlexMercer-MA/UnrealEngine-4.27
+        path: a
+        lfs: true
 
-      - name: Map UE4 to drive X
-        shell: cmd
-        run: |
-          subst X: %GITHUB_WORKSPACE%\a
+    # -------------------------------------------------
+    # Patch UE4 to allow VS2022 (windows-latest)
+    # -------------------------------------------------
+    - name: Patch UE4 for VS2022
+      shell: powershell
+      run: |
+        $file = "a\Engine\Source\Programs\UnrealBuildTool\Platform\Windows\WindowsPlatformCompilerSetup.cs"
+        (Get-Content $file) `
+          -replace 'MaximumVisualStudioVersion = VisualStudioVersion\.VS2019;', 'MaximumVisualStudioVersion = VisualStudioVersion.Latest;' `
+          -replace 'throw new BuildException\(.+?\);', '// Disabled compiler version check for CI' `
+          | Set-Content $file
 
-      - name: Print Disk Space Before Setup
-        shell: powershell
-        run: Get-PSDrive -PSProvider FileSystem
+    # -------------------------------------------------
+    # Map engine to X: drive (avoid path length issues)
+    # -------------------------------------------------
+    - name: Map UE4 to drive X
+      shell: cmd
+      run: subst X: %GITHUB_WORKSPACE%\a
 
+    # -------------------------------------------------
+    # Cache GitDependencies (6.5GB download)
+    # -------------------------------------------------
+    - name: Cache UE4 Dependencies
+      uses: actions/cache@v4
+      with:
+        path: a\.git\ue4-gitdeps
+        key: ue4-gitdeps-4.27
 
-      - name: Sync UE4 Dependencies (No Prereqs)
-        shell: cmd
-        run: |
-          cd /d X:\
-          Engine\Binaries\DotNET\GitDependencies.exe --exclude=Mac --exclude=Linux --exclude=Android --exclude=IOS --exclude=TVOS --exclude=WinRT --exclude=HTML5 --threads=8
+    # -------------------------------------------------
+    # Download Dependencies (no prereq installer)
+    # -------------------------------------------------
+    - name: Sync UE4 Dependencies
+      shell: cmd
+      run: |
+        cd /d X:\
+        Engine\Binaries\DotNET\GitDependencies.exe ^
+          --exclude=Mac ^
+          --exclude=Linux ^
+          --exclude=Android ^
+          --exclude=IOS ^
+          --exclude=TVOS ^
+          --exclude=WinRT ^
+          --exclude=HTML5 ^
+          --threads=16
 
+    # -------------------------------------------------
+    # Generate project files
+    # -------------------------------------------------
+    - name: Generate Project Files
+      shell: cmd
+      run: |
+        cd /d X:\
+        GenerateProjectFiles.bat
 
-      - name: Print Disk Space After Setup
-        shell: powershell
-        run: Get-PSDrive -PSProvider FileSystem
+    # -------------------------------------------------
+    # Build Engine (Game target only, no Editor)
+    # -------------------------------------------------
+    - name: Build UE4Game
+      shell: cmd
+      run: |
+        cd /d X:\
+        Engine\Build\BatchFiles\Build.bat UE4Game Win64 Development -NoDebugInfo -NoHotReload
 
-      - name: Generate Project Files
-        shell: cmd
-        run: |
-          cd /d X:\
-          GenerateProjectFiles.bat
+    # -------------------------------------------------
+    # Checkout Your Project
+    # -------------------------------------------------
+    - name: Checkout Project
+      uses: actions/checkout@v4
+      with:
+        repository: ViteStudio-Tech/ueVite-ThirdPersonGAS-Example
+        path: p
+        lfs: true
 
-      - name: Build UE4Game
-        shell: cmd
-        run: |
-          cd /d X:\
-          Engine\Build\BatchFiles\Build.bat UE4Game Win64 Development -NoDebugInfo -NoHotReload
+    # -------------------------------------------------
+    # Build Your Project
+    # -------------------------------------------------
+    - name: Build Project
+      shell: cmd
+      run: |
+        X:\Engine\Build\BatchFiles\Build.bat ActionRPG Win64 Development ^
+        -Project="%GITHUB_WORKSPACE%\p\ActionRPG - Vite\ActionRPG.uproject" ^
+        -NoDebugInfo -NoHotReload
