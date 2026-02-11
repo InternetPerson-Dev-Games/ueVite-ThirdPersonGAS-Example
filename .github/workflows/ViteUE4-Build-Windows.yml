@@ -110,6 +110,26 @@ jobs:
         Write-Host "Build completed successfully."
 
     # -------------------------------------------------
+    # Search for built files dynamically
+    # -------------------------------------------------
+    - name: Find Build Output
+      shell: powershell
+      run: |
+        $binaries = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\project\Binaries" -Recurse -File -ErrorAction SilentlyContinue
+        $saved = Get-ChildItem -Path "$env:GITHUB_WORKSPACE\project\Saved" -Recurse -File -ErrorAction SilentlyContinue
+
+        if ($binaries.Count -eq 0 -and $saved.Count -eq 0) {
+            Write-Warning "No files found in Binaries or Saved folders!"
+        } else {
+            Write-Host "Found build files:"
+            $binaries + $saved | ForEach-Object { Write-Host $_.FullName }
+        }
+
+        # Save the found paths to variables for upload
+        $binaries | ForEach-Object { $_.FullName } | Out-File "$env:GITHUB_WORKSPACE\binaries.txt"
+        $saved | ForEach-Object { $_.FullName } | Out-File "$env:GITHUB_WORKSPACE\saved.txt"
+
+    # -------------------------------------------------
     # Upload Build Artifacts
     # -------------------------------------------------
     - name: Upload Build Artifacts
@@ -117,5 +137,5 @@ jobs:
       with:
         name: MinimalGameBuild
         path: |
-          project\Binaries
-          project\Saved
+          $(Get-Content "$env:GITHUB_WORKSPACE\binaries.txt")
+          $(Get-Content "$env:GITHUB_WORKSPACE\saved.txt")
