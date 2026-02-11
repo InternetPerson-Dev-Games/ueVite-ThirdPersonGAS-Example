@@ -11,6 +11,19 @@ jobs:
 
     steps:
 
+
+    # -------------------------------------------------
+    # Clean up Storage
+    # -------------------------------------------------
+
+    - run: df -h
+    - name: "node-cleanup"
+      run: |
+        sudo rm -rf /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo docker builder prune -a
+    - run: df -h
+
     # -------------------------------------------------
     # Install Dependencies
     # -------------------------------------------------
