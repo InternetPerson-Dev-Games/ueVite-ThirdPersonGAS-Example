@@ -33,11 +33,19 @@ jobs:
         run: |
           subst X: %GITHUB_WORKSPACE%\a
 
-      - name: Setup UE4
+      - name: Print Disk Space Before Setup
+        shell: powershell
+        run: Get-PSDrive -PSProvider FileSystem
+
+      - name: Setup UE4 (Skip Prereqs)
         shell: cmd
         run: |
           cd /d X:\
-          Setup.bat -exclude=Mac -exclude=Linux -exclude=Android -exclude=IOS -exclude=TVOS -exclude=WinRT -exclude=HTML5
+          Setup.bat -exclude=Mac -exclude=Linux -exclude=Android -exclude=IOS -exclude=TVOS -exclude=WinRT -exclude=HTML5 -SkipBuildPatchPrereq
+
+      - name: Print Disk Space After Setup
+        shell: powershell
+        run: Get-PSDrive -PSProvider FileSystem
 
       - name: Generate Project Files
         shell: cmd
@@ -50,15 +58,3 @@ jobs:
         run: |
           cd /d X:\
           Engine\Build\BatchFiles\Build.bat UE4Game Win64 Development -NoDebugInfo -NoHotReload
-
-      - name: Checkout Project
-        uses: actions/checkout@v4
-        with:
-          repository: ViteStudio-Tech/ueVite-ThirdPersonGAS-Example
-          path: p
-          lfs: true
-
-      - name: Build Project
-        shell: cmd
-        run: |
-          X:\Engine\Build\BatchFiles\Build.bat ActionRPG Win64 Development -Project="%GITHUB_WORKSPACE%\p\ActionRPG - Vite\ActionRPG.uproject" -NoDebugInfo -NoHotReload
