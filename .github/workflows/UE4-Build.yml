@@ -19,7 +19,6 @@ jobs:
       run: |
         New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
         -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
-
     - name: Enable git long paths
       run: git config --system core.longpaths true
 
@@ -34,9 +33,10 @@ jobs:
         lfs: true
         fetch-depth: 1
 
+    # Map UE4 to drive X
     - name: Map UE4 to drive X
       shell: cmd
-      run: 'subst X: %GITHUB_WORKSPACE%\a'
+      run: subst X: %GITHUB_WORKSPACE%\a
 
     # -------------------------------
     # Cache UE4 Dependencies
@@ -66,7 +66,16 @@ jobs:
         GenerateProjectFiles.bat
 
     # -------------------------------
-    # Checkout Your Project
+    # Build UE4Editor (all engine plugins)
+    # -------------------------------
+    - name: Build UE4Editor
+      shell: cmd
+      run: |
+        cd /d X:\
+        Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -NoDebugInfo -NoHotReload
+
+    # -------------------------------
+    # Checkout your project
     # -------------------------------
     - name: Checkout Project
       uses: actions/checkout@v4
@@ -75,32 +84,25 @@ jobs:
         path: p
         lfs: true
 
-    # Scan .uproject for enabled plugins
     # -------------------------------
-    - name: Get enabled plugins
+    # Scan project for project-local plugins
+    # -------------------------------
+    - name: Get project plugins
       shell: powershell
       run: |
         $uproject = "$env:GITHUB_WORKSPACE\p\ActionRPG - Vite\ActionRPG.uproject"
-        Write-Host "Scanning $uproject for enabled plugins..."
+        Write-Host "Scanning $uproject for project-local plugins..."
         $json = Get-Content $uproject | ConvertFrom-Json
-        $enabledPlugins = $json.Plugins | Where-Object { $_.Enabled -eq $true } | ForEach-Object { '-Plugin="'+$_.Name+'"' }
-        $enabledPluginsString = $enabledPlugins -join ' '
-        Write-Host "Enabled plugins: $enabledPluginsString"
-        # Save as plain string for later
-        Set-Content -Path "$env:GITHUB_WORKSPACE\plugin_args.txt" -Value $enabledPluginsString
-    
+        # Only include plugins that exist in the project's Plugins folder
+        $projectPlugins = $json.Plugins | Where-Object {
+          $_.Enabled -eq $true -and (Test-Path "$env:GITHUB_WORKSPACE\p\Plugins\$($_.Name)")
+        } | ForEach-Object { '-Plugin="'+$_.Name+'"' }
+        $pluginArgs = $projectPlugins -join ' '
+        Write-Host "Project plugins to build: $pluginArgs"
+        Set-Content -Path "$env:GITHUB_WORKSPACE\plugin_args.txt" -Value $pluginArgs
+
     # -------------------------------
-    # Build UE4Editor with required plugins
-    # -------------------------------
-    - name: Build UE4Editor
-      shell: powershell
-      run: |
-        $pluginArgs = Get-Content "$env:GITHUB_WORKSPACE\plugin_args.txt"
-        Write-Host "Building UE4Editor with plugins: $pluginArgs"
-        Start-Process -NoNewWindow -Wait -FilePath "X:\Engine\Build\BatchFiles\Build.bat" -ArgumentList "UE4Editor Win64 Development $pluginArgs -NoDebugInfo -NoHotReload"
-    
-    # -------------------------------
-    # Build Project with required plugins
+    # Build Project (with project-local plugins only)
     # -------------------------------
     - name: Build Project
       shell: powershell
