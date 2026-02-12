@@ -167,18 +167,15 @@ jobs:
       run: |
         $config = "${{ github.event.inputs.buildConfig }}"
         if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
-
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
         $outputDir = "$env:GITHUB_WORKSPACE\project\release"
-
-        Write-Host "Packaging WindowsNoEditor to $outputDir ..."
-
+        Write-Host "Packaging WindowsNoEditor to $outputDir with configuration: '$config' ..."
         & "X:\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun `
           -project="$uproject" `
           -noP4 `
           -platform=Win64 `
-          -clientconfig=$config `
-          -serverconfig=$config `
+          -clientconfig="$config" `
+          -serverconfig="$config" `
           -cook `
           -allmaps `
           -build `
@@ -186,11 +183,9 @@ jobs:
           -pak `
           -archive `
           -archivedirectory="$outputDir"
-
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
         Write-Host "Packaging completed successfully."
-
+    
     # -------------------------------------------------
     # Upload Full Packaged Game
     # -------------------------------------------------
