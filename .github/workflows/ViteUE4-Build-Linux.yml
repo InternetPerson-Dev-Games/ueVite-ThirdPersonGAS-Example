@@ -40,6 +40,7 @@ jobs:
           libgtk-3-dev cmake ninja-build git wget unzip ccache
         # Enable ccache for faster rebuilds
         export PATH="/usr/lib/ccache:$PATH"
+        df -h
 
     # -------------------------------------------------
     # Checkout UE4 Custom Engine
@@ -82,6 +83,7 @@ jobs:
     - name: Build UE4 Engine
       run: |
         cd ue
+        df -h
         make -j$(nproc)  # Use all available cores
 
     # -------------------------------------------------
@@ -119,6 +121,7 @@ jobs:
     # -------------------------------------------------
     - name: Cleanup Engine Binaries
       run: |
+        df -h
         cd ue
         rm -rf Engine/Binaries/Linux/UE4Editor
         rm -rf Engine/Binaries/Linux/UE4Game
