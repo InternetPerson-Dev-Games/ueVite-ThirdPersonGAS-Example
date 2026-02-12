@@ -33,7 +33,7 @@ jobs:
         sudo apt-get remove -y 'php.*' --fix-missing || echo "::warning::Failed to remove php packages"
         sudo apt-get remove -y '^mongodb-.*' --fix-missing || echo "::warning::Failed to remove mongodb packages"
         sudo apt-get remove -y '^mysql-.*' --fix-missing || echo "::warning::Failed to remove mysql packages"
-        sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri --fix-missing || echo "::warning::Failed to remove misc packages"
+        sudo apt-get remove -y azure-cli google-chrome-stable firefox powershell libgl1-mesa-dri --fix-missing || echo "::warning::Failed to remove misc packages"
         sudo apt-get remove -y google-cloud-sdk --fix-missing || echo "::debug::Failed to remove google-cloud-sdk"
         sudo apt-get remove -y google-cloud-cli --fix-missing || echo "::debug::Failed to remove google-cloud-cli"
         sudo apt-get autoremove -y || echo "::warning::Failed to autoremove"
