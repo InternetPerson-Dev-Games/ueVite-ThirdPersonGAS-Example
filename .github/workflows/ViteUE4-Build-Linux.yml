@@ -20,7 +20,7 @@ jobs:
     # -------------------------------------------------
     # Aggressive cleanup to free disk space
     # -------------------------------------------------
-    - name: Free up disk space # Inspiration - https://github.com/jlumbroso/free-disk-space/blob/main/action.yml - Licenced under the MIT licence  https://carlosbecker.com/posts/github-actions-disk-space/ 
+    - name: Free up disk space # Inspiration - https://github.com/jlumbroso/free-disk-space/blob/main/action.yml - Licenced under the MIT licence  https://carlosbecker.com/posts/github-actions-disk-space/ - https://dev.to/mathio/squeezing-disk-space-from-github-actions-runners-an-engineers-guide-3pjg - https://github.com/endersonmenezes/free-disk-space Also licenced under MIT
       run: |
         sudo rm -rf /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
         sudo rm -rf /home/runner/.cache /home/runner/.npm /home/runner/.local/share /home/runner/.dotnet
@@ -41,8 +41,19 @@ jobs:
         sudo docker image prune --all --force || true
         sudo swapoff -a || true
         sudo rm -f /mnt/swapfile || true
+        sudo rm -rf /usr/lib/jvm
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/julia*
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /opt/microsoft /opt/google
+        sudo rm -rf /opt/az
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /opt/hostedtoolcache
         free -h
         df -h 
+
 
     # -------------------------------------------------
     # Install UE4 Linux dependencies and ccache
@@ -68,7 +79,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ncdu
 
           # Run ncdu scan and output JSON
-          ncdu -o ncdu_output.json .
+          sudo ncdu -o ncdu_output.json /
 
     - name: Upload NCdu output as artifact
       uses: actions/upload-artifact@v4
