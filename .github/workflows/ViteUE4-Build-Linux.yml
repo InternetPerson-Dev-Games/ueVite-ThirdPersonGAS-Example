@@ -60,8 +60,26 @@ jobs:
         df -h
 
     # -------------------------------------------------
+    # NCDU Print Out
+    # -------------------------------------------------
+    - name: Scan disk usage with ncdu
+      run: |
+          # Install ncdu
+          sudo apt-get update && sudo apt-get install -y ncdu
+
+          # Run ncdu scan and output JSON
+          ncdu -o ncdu_output.json .
+
+    - name: Upload NCdu output as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ncdu-output
+        path: ncdu_output.json
+
+    # -------------------------------------------------
     # Checkout UE4 Custom Engine
     # -------------------------------------------------
+
     - name: Checkout UE4 Custom Engine
       uses: actions/checkout@v4
       with:
@@ -69,6 +87,7 @@ jobs:
         path: ue
         lfs: true
         token: ${{ secrets.UE_PAT }}
+
 
     # -------------------------------------------------
     # Setup UE4 Engine (official Linux instructions)
