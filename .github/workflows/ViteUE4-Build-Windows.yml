@@ -159,13 +159,10 @@ jobs:
         path: |
           project\Binaries
           project\Intermediate
-        key: ${{ runner.os }}-project-${{ hashFiles(
-          'project/Source/**',
-          'project/*.uproject'
-        ) }}
+        key: ${{ runner.os }}-project-${{ hashFiles('project/Source/**', 'project/*.uproject') }}
         restore-keys: |
           ${{ runner.os }}-project-
-
+      
     # -------------------------------------------------
     # Cache DerivedDataCache
     # -------------------------------------------------
