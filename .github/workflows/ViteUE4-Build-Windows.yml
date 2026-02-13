@@ -178,6 +178,7 @@ jobs:
           -project="$uproject" `
           -noP4 `
           -platform=Win64 `
+          -game `
           -clientconfig="$config" `
           -serverconfig="$config" `
           -cook `
