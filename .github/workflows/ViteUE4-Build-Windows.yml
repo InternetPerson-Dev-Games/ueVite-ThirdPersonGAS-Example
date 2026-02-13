@@ -18,11 +18,6 @@ jobs:
   build:
     runs-on: windows-2019
 
-    env:
-      ENGINE_CACHE_KEY: ue4-engine-4.27-v1
-      PROJECT_CACHE_KEY: project-build-v1
-      DDC_CACHE_KEY: ddc-cache-v1
-
     steps:
 
     # -------------------------------------------------
@@ -63,28 +58,31 @@ jobs:
         subst X: "%GITHUB_WORKSPACE%\ue"
 
     # -------------------------------------------------
-    # Restore Engine Cache FIRST
+    # Restore Engine Build Cache
     # -------------------------------------------------
     - name: Restore Engine Build Cache
       uses: actions/cache@v4
       with:
         path: |
-          ue\Engine\Intermediate
           ue\Engine\Binaries
-        key: ${{ env.ENGINE_CACHE_KEY }}
+          ue\Engine\Intermediate
+          ue\Engine\Saved
+        key: ${{ runner.os }}-ue4-engine-4.27-${{ hashFiles('ue/Engine/Source/**', 'ue/Engine/Build/**') }}
         restore-keys: |
-          ${{ runner.os }}-ue4-4.27-
+          ${{ runner.os }}-ue4-engine-4.27-
 
     # -------------------------------------------------
-    # Cache GitDependencies + ThirdParty
+    # Cache UE4 Dependencies
     # -------------------------------------------------
-    - name: Cache GitDependencies
+    - name: Cache UE4 Dependencies
       uses: actions/cache@v4
       with:
         path: |
           ue\.git\ue4-gitdeps
           ue\Engine\Binaries\ThirdParty
-        key: gitdeps-4.27
+          ue\Engine\Source\ThirdParty
+          ue\Engine\Extras
+        key: ${{ runner.os }}-ue4-deps-4.27
 
     # -------------------------------------------------
     # Sync Dependencies
@@ -104,7 +102,7 @@ jobs:
           --threads=16
 
     # -------------------------------------------------
-    # Generate Project Files (necessary for build)
+    # Generate Project Files
     # -------------------------------------------------
     - name: Generate Project Files
       shell: cmd
@@ -127,9 +125,11 @@ jobs:
       uses: actions/cache@v4
       with:
         path: |
-          project\**\Intermediate
-          project\**\Binaries
-        key: ${{ env.PROJECT_CACHE_KEY }}
+          project\Binaries
+          project\Intermediate
+        key: ${{ runner.os }}-project-${{ hashFiles('project/Source/**', 'project/*.uproject') }}
+        restore-keys: |
+          ${{ runner.os }}-project-
 
     # -------------------------------------------------
     # Cache DerivedDataCache
@@ -139,12 +139,14 @@ jobs:
       with:
         path: |
           ue\Engine\DerivedDataCache
-          project\**\DerivedDataCache
-        key: ${{ env.DDC_CACHE_KEY }}
+          project\Saved\DerivedDataCache
+        key: ${{ runner.os }}-ddc-${{ hashFiles('project/Content/**') }}
+        restore-keys: |
+          ${{ runner.os }}-ddc-
 
-# -------------------------------------------------
-# Build UE4 Editor (required for cooking)
-# -------------------------------------------------
+    # -------------------------------------------------
+    # Build UE4 Editor (required for cooking)
+    # -------------------------------------------------
     - name: Build UE4 Editor
       shell: powershell
       run: |
@@ -159,7 +161,7 @@ jobs:
         Write-Host "UE4Editor build completed."
 
     # -------------------------------------------------
-    # Build Game Target Only
+    # Build Game Target
     # -------------------------------------------------
     - name: Build Game Target
       shell: powershell
@@ -180,7 +182,7 @@ jobs:
         Write-Host "Build completed successfully."
 
     # -------------------------------------------------
-    # Package WindowsNoEditor (skip building editor)
+    # Package WindowsNoEditor
     # -------------------------------------------------
     - name: Package WindowsNoEditor
       shell: powershell
