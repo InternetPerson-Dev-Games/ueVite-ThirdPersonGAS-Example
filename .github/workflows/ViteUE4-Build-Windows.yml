@@ -20,7 +20,7 @@ jobs:
 
     steps:
     # -------------------------------------------------
-    # Enable Long Paths
+    # Enable Windows long paths
     # -------------------------------------------------
     - name: Enable Windows long paths
       shell: powershell
@@ -39,7 +39,7 @@ jobs:
         choco install directx -y 
 
     # -------------------------------------------------
-    # Checkout UE4 Engine
+    # Checkout Custom UE4 Engine
     # -------------------------------------------------
     - name: Checkout UE4 Engine
       uses: actions/checkout@v4
@@ -102,7 +102,7 @@ jobs:
           --threads=16
 
     # -------------------------------------------------
-    # Checkout Game Project (before generating project files!)
+    # Checkout Game Project
     # -------------------------------------------------
     - name: Checkout Game Project
       uses: actions/checkout@v4
@@ -138,41 +138,32 @@ jobs:
           ${{ runner.os }}-ddc-
 
     # -------------------------------------------------
-    # Generate Project Files (after checkout)
+    # Generate Project Files
     # -------------------------------------------------
     - name: Generate Project Files
       shell: cmd
       run: cd /d X:\ && GenerateProjectFiles.bat
 
     # -------------------------------------------------
-    # Check if UE4Editor exists
+    # Build Full UE4 Editor (All Engine Plugins)
     # -------------------------------------------------
-    - name: Check if UE4Editor exists
-      id: check_editor
+    - name: Build UE4 Editor (Full Engine + Plugins)
       shell: powershell
       run: |
-        if (Test-Path "X:\Engine\Binaries\Win64\UE4Editor-Cmd.exe") {
-          echo "exists=true" >> $env:GITHUB_OUTPUT
-        } else {
-          echo "exists=false" >> $env:GITHUB_OUTPUT
-        }
-
-    # -------------------------------------------------
-    # Build UE4 Editor (required for cooking)
-    # -------------------------------------------------
-    - name: Build UE4 Editor
-      if: steps.check_editor.outputs.exists == 'false'
-      shell: powershell
-      run: |
-        Write-Host "Building UE4Editor-Cmd..."
+        Write-Host "Building UE4Editor with all engine plugins..."
         & "X:\Engine\Build\BatchFiles\Build.bat" `
           UE4Editor `
           Win64 `
           Development `
+          -AllModules `
+          -AllPlugins `
+          -ForceBuildPlugins `
           -NoHotReload `
-          -NoDebugInfo
+          -NoDebugInfo `
+          -WaitMutex
+
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        Write-Host "UE4Editor-Cmd build completed."
+        Write-Host "Full engine + editor build completed successfully."
 
     # -------------------------------------------------
     # Build Game Target (includes RTXGI plugin)
@@ -182,9 +173,11 @@ jobs:
       run: |
         $config = "${{ github.event.inputs.buildConfig }}"
         if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
+
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
         if (!(Test-Path $uproject)) { Write-Error "UPROJECT NOT FOUND!"; exit 1 }
-        Write-Host "Building configuration: $config"
+
+        Write-Host "Building game target ($config)..."
         & "X:\Engine\Build\BatchFiles\Build.bat" `
           ActionRPG `
           Win64 `
@@ -192,20 +185,23 @@ jobs:
           -Project="$uproject" `
           -NoHotReload `
           -NoDebugInfo
+
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        Write-Host "Build completed successfully."
+        Write-Host "Game build completed successfully."
 
     # -------------------------------------------------
-    # Package WindowsNoEditor (includes cooked RTXGI plugin)
+    # Package WindowsNoEditor
     # -------------------------------------------------
     - name: Package WindowsNoEditor
       shell: powershell
       run: |
         $config = "${{ github.event.inputs.buildConfig }}"
         if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
+
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
         $outputDir = "$env:GITHUB_WORKSPACE\project\release"
-        Write-Host "Packaging WindowsNoEditor to $outputDir with configuration: '$config' ..."
+
+        Write-Host "Packaging WindowsNoEditor ($config)..."
         & "X:\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun `
           -project="$uproject" `
           -noP4 `
@@ -218,7 +214,9 @@ jobs:
           -stage `
           -pak `
           -archive `
-          -archivedirectory="$outputDir"
+          -archivedirectory="$outputDir" `
+          -AdditionalCookerOptions="-forceenableplugins=RTXGI"
+
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         Write-Host "Packaging completed successfully."
 
@@ -230,3 +228,16 @@ jobs:
       with:
         name: UE4-WindowsNoEditor-${{ github.event.inputs.buildConfig }}
         path: project\release\**\WindowsNoEditor\**
+
+    # -------------------------------------------------
+    # Upload UE Logs
+    # -------------------------------------------------
+    - name: Upload UE Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: UE4-Logs
+        path: |
+          X:\Engine\Programs\AutomationTool\Saved\Logs\**
+          X:\Engine\Programs\AutomationTool\Saved\Cook-*.txt
+          project\Saved\Logs\**
