@@ -68,11 +68,24 @@ jobs:
     # -------------------------------------------------
     - name: Setup UE4 Engine
       run: |
+        set -o pipefail
         cd ue
         ./Setup.sh
         ./GenerateProjectFiles.sh
-        make -j$(nproc)
+        make -j$(nproc) VERBOSE=1 | tee ue4-build.log
         df -h
+
+    # -------------------------------------------------
+    # Upload UE4 Build Logs (always, even on failure)
+    # -------------------------------------------------
+    - name: Upload UE4 Build Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ue4-build-logs
+        path: |
+          ue/ue4-build.log
+          ue/Engine/Programs/UnrealBuildTool/Log.txt
 
     # -------------------------------------------------
     # Checkout Game Project
@@ -89,6 +102,8 @@ jobs:
     # -------------------------------------------------
     - name: Build Game Target
       run: |
+        set -o pipefail
+
         UPROJECT=$(find "$GITHUB_WORKSPACE/project" -name "*.uproject" | head -n 1)
 
         if [ -z "$UPROJECT" ]; then
@@ -103,9 +118,20 @@ jobs:
           ActionRPGServer Linux Development \
           -Project="$UPROJECT" \
           -NoHotReload \
-          -TargetType=Server
+          -TargetType=Server | tee game-build.log
 
         echo "Build completed successfully."
+
+    # -------------------------------------------------
+    # Upload Game Build Logs
+    # -------------------------------------------------
+    - name: Upload Game Build Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: game-build-logs
+        path: |
+          game-build.log
 
     # -------------------------------------------------
     # Optional: Cleanup engine editor binaries to save space
