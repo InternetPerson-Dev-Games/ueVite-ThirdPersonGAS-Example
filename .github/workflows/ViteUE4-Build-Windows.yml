@@ -144,7 +144,7 @@ jobs:
         key: ddc-v1
 
     # -------------------------------------------------
-    # Build UE4 Editor (Engine)
+    # Build UE4 Editor
     # -------------------------------------------------
     - name: Build UE4 Editor
       shell: powershell
@@ -157,42 +157,17 @@ jobs:
           -NoDebugInfo
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-
     # -------------------------------------------------
-    # Build ShaderCompileWorker (REQUIRED FOR COOK)
+    # Build ShaderCompileWorker
     # -------------------------------------------------
     - name: Build ShaderCompileWorker
       shell: powershell
       run: |
-        Write-Host "Building ShaderCompileWorker..."
-    
         & "X:\Engine\Build\BatchFiles\Build.bat" `
           ShaderCompileWorker `
           Win64 `
           Development `
           -NoDebugInfo
-    
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-        Write-Host "ShaderCompileWorker build completed."
-    # -------------------------------------------------
-    # Build RTXGI Plugin (CRITICAL FIX)
-    # -------------------------------------------------
-    - name: Build RTXGI Plugin
-      shell: powershell
-      run: |
-        $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
-        $plugin = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\Plugins\RTXGI\RTXGI.uplugin"
-
-        & "X:\Engine\Build\BatchFiles\Build.bat" `
-          UE4Editor `
-          Win64 `
-          Development `
-          -Project="$uproject" `
-          -Plugin="$plugin" `
-          -NoHotReload `
-          -NoDebugInfo
-
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # -------------------------------------------------
@@ -226,15 +201,15 @@ jobs:
         if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
 
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
-        $output = "$env:GITHUB_WORKSPACE\project\release"
+        $output   = "$env:GITHUB_WORKSPACE\project\release"
 
         & "X:\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun `
           -project="$uproject" `
           -noP4 `
+          -targetplatform=WindowsNoEditor `
           -platform=Win64 `
           -game `
           -clientconfig="$config" `
-          -serverconfig="$config" `
           -cook `
           -allmaps `
           -stage `
@@ -245,7 +220,7 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # -------------------------------------------------
-    # Copy Logs into Workspace (FIX)
+    # Collect Logs
     # -------------------------------------------------
     - name: Collect Logs
       if: always()
