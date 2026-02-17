@@ -44,8 +44,9 @@ jobs:
 
       - name: Map UE to X drive
         shell: cmd
-        run: subst X: "%GITHUB_WORKSPACE%\ue"
-
+        run: |
+          subst X: "%GITHUB_WORKSPACE%\ue"
+        
       - name: Cache UE Dependencies
         uses: actions/cache@v4
         with:
