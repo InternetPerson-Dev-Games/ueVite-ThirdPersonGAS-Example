@@ -98,13 +98,13 @@ jobs:
     # -------------------------------------------------
     # Prebuild AutomationTool (CRITICAL FIX)
     # -------------------------------------------------
-    - name: Build AutomationTool
+    - name: Prime AutomationTool (UE4-safe)
       shell: powershell
       run: |
-        & X:\Engine\Build\BatchFiles\Build.bat `
-          AutomationTool Win64 Development -NoDebugInfo
+        Write-Host "Priming AutomationTool..."
+        & X:\Engine\Build\BatchFiles\RunUAT.bat -help
         if ($LASTEXITCODE -ne 0) { exit 1 }
-
+    
     # -------------------------------------------------
     # Checkout Game Project
     # -------------------------------------------------
