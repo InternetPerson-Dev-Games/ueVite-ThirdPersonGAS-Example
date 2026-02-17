@@ -1,4 +1,4 @@
-name: UE4 Optimized Build
+name: UE4 Optimized Build (Windows)
 
 on:
   push:
@@ -6,20 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       buildConfig:
-        description: "Build Configuration"
+        description: Build Configuration
         required: true
-        default: "Development"
+        default: Development
         type: choice
-        options:
-          - Development
-          - Shipping
+        options: [Development, Shipping]
 
 jobs:
   build:
     runs-on: windows-2019
 
     steps:
-
     # -------------------------------------------------
     # Enable Long Paths
     # -------------------------------------------------
@@ -35,9 +32,9 @@ jobs:
         git config --system core.longpaths true
 
     # -------------------------------------------------
-    # Install VC++ + DirectX
+    # Install Runtime Dependencies
     # -------------------------------------------------
-    - name: Install VC++ Runtime
+    - name: Install VC++ + DirectX
       shell: powershell
       run: |
         choco install vcredist-all -y
@@ -59,33 +56,16 @@ jobs:
     # -------------------------------------------------
     - name: Map UE4 to X
       shell: cmd
-      run: |
-        subst X: "%GITHUB_WORKSPACE%\ue"
+      run: subst X: "%GITHUB_WORKSPACE%\ue"
 
     # -------------------------------------------------
-    # Cache UE4 Engine Build
-    # -------------------------------------------------
-    - name: Cache UE4 Engine
-      uses: actions/cache@v4
-      with:
-        path: |
-          ue\Engine\Binaries
-          ue\Engine\Intermediate
-          ue\Engine\Saved
-        key: ue4-engine-4.27
-
-    # -------------------------------------------------
-    # Cache UE4 Dependencies
+    # Cache UE4 GitDependencies (SAFE)
     # -------------------------------------------------
     - name: Cache UE4 Dependencies
       uses: actions/cache@v4
       with:
-        path: |
-          ue\.git\ue4-gitdeps
-          ue\Engine\Binaries\ThirdParty
-          ue\Engine\Source\ThirdParty
-          ue\Engine\Extras
-        key: ue4-deps-4.27
+        path: ue\.git\ue4-gitdeps
+        key: ue4-gitdeps-4.27
 
     # -------------------------------------------------
     # Sync UE4 Dependencies
@@ -95,14 +75,9 @@ jobs:
       run: |
         cd /d X:\
         Engine\Binaries\DotNET\GitDependencies.exe ^
-          --exclude=Mac ^
-          --exclude=Linux ^
-          --exclude=Android ^
-          --exclude=IOS ^
-          --exclude=TVOS ^
-          --exclude=WinRT ^
-          --exclude=HTML5 ^
-          --threads=16
+          --exclude=Mac --exclude=Linux --exclude=Android ^
+          --exclude=IOS --exclude=TVOS --exclude=WinRT ^
+          --exclude=HTML5
 
     # -------------------------------------------------
     # Generate Project Files
@@ -122,103 +97,38 @@ jobs:
         lfs: true
 
     # -------------------------------------------------
-    # Cache Project Build
+    # Build Editor Tools
     # -------------------------------------------------
-    - name: Cache Project Build
-      uses: actions/cache@v4
-      with:
-        path: |
-          project\Binaries
-          project\Intermediate
-        key: project-build-v1
-
-    # -------------------------------------------------
-    # Cache DerivedDataCache
-    # -------------------------------------------------
-    - name: Cache DDC
-      uses: actions/cache@v4
-      with:
-        path: |
-          ue\Engine\DerivedDataCache
-          project\Saved\DerivedDataCache
-        key: ddc-v1
-
-    # -------------------------------------------------
-    # Build UE4 Editor
-    # -------------------------------------------------
-    - name: Build UE4 Editor
+    - name: Build Editor Tools
       shell: powershell
       run: |
-        & "X:\Engine\Build\BatchFiles\Build.bat" `
-          UE4Editor `
-          Win64 `
-          Development `
-          -NoHotReload `
-          -NoDebugInfo
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & X:\Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -NoHotReload -NoDebugInfo
+        & X:\Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -NoDebugInfo
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
     # -------------------------------------------------
-    # Build ShaderCompileWorker
+    # Build Runtime Tools (CRITICAL)
     # -------------------------------------------------
-    - name: Build ShaderCompileWorker
+    - name: Build Runtime Tools
       shell: powershell
       run: |
-        & "X:\Engine\Build\BatchFiles\Build.bat" `
-          ShaderCompileWorker `
-          Win64 `
-          Development `
-          -NoDebugInfo
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & X:\Engine\Build\BatchFiles\Build.bat UE4Game Win64 Development -NoDebugInfo
+        & X:\Engine\Build\BatchFiles\Build.bat UnrealPak Win64 Development -NoDebugInfo
+        & X:\Engine\Build\BatchFiles\Build.bat CrashReportClient Win64 Development -NoDebugInfo
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
     # -------------------------------------------------
-    # Build Game Target
+    # Build Game
     # -------------------------------------------------
-    - name: Build Game Target
+    - name: Build Game
       shell: powershell
       run: |
-        $config = "${{ github.event.inputs.buildConfig }}"
-        if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
-
+        $cfg = "${{ github.event.inputs.buildConfig }}"
+        if (!$cfg) { $cfg = "Development" }
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
-
-        & "X:\Engine\Build\BatchFiles\Build.bat" `
-          ActionRPG `
-          Win64 `
-          $config `
-          -Project="$uproject" `
-          -NoHotReload `
-          -NoDebugInfo
-
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-
-    # -------------------------------------------------
-    # Build Required Runtime Targets (FIX)
-    # -------------------------------------------------
-    - name: Build UE4 Runtime Targets
-      shell: powershell
-      run: |
-        $targets = @(
-          "UE4Game",
-          "UnrealPak",
-          "CrashReportClient",
-          "AutomationTool"
-        )
-
-        foreach ($t in $targets) {
-          Write-Host "Building $t..."
-          & "X:\Engine\Build\BatchFiles\Build.bat" `
-            $t `
-            Win64 `
-            Development `
-            -NoHotReload `
-            -NoDebugInfo
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "$t build failed"
-            exit $LASTEXITCODE
-          }
-        }
+        & X:\Engine\Build\BatchFiles\Build.bat ActionRPG Win64 $cfg `
+          -Project="$uproject" -NoHotReload -NoDebugInfo
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
     # -------------------------------------------------
     # Package WindowsNoEditor
@@ -226,27 +136,20 @@ jobs:
     - name: Package WindowsNoEditor
       shell: powershell
       run: |
-        $config = "${{ github.event.inputs.buildConfig }}"
-        if ([string]::IsNullOrWhiteSpace($config)) { $config = "Development" }
-
+        $cfg = "${{ github.event.inputs.buildConfig }}"
+        if (!$cfg) { $cfg = "Development" }
         $uproject = "$env:GITHUB_WORKSPACE\project\ActionRPG - Vite\ActionRPG.uproject"
-        $output   = "$env:GITHUB_WORKSPACE\project\release"
+        $out = "$env:GITHUB_WORKSPACE\project\release"
 
-        & "X:\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun `
+        & X:\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun `
           -project="$uproject" `
           -noP4 `
-          -targetplatform=Win64 `
           -platform=Win64 `
-          -game `
-          -clientconfig="$config" `
-          -cook `
-          -allmaps `
-          -stage `
-          -pak `
-          -archive `
-          -archivedirectory="$output"
+          -clientconfig=$cfg `
+          -cook -allmaps -stage -pak -archive `
+          -archivedirectory="$out"
 
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
     # -------------------------------------------------
     # Collect Logs
@@ -255,15 +158,9 @@ jobs:
       if: always()
       shell: powershell
       run: |
-        New-Item -ItemType Directory -Force `
-          "$env:GITHUB_WORKSPACE\project\Saved\Logs" | Out-Null
-
-        Copy-Item `
-          "X:\Engine\Programs\AutomationTool\Saved\Logs\*" `
-          "$env:GITHUB_WORKSPACE\project\Saved\Logs" `
-          -Recurse `
-          -Force `
-          -ErrorAction SilentlyContinue
+        mkdir project\Saved\Logs -Force | Out-Null
+        Copy-Item X:\Engine\Programs\AutomationTool\Saved\Logs\* `
+          project\Saved\Logs -Recurse -Force -ErrorAction SilentlyContinue
 
     # -------------------------------------------------
     # Upload Logs
@@ -283,3 +180,5 @@ jobs:
       with:
         name: UE4-WindowsNoEditor-${{ github.event.inputs.buildConfig }}
         path: project\release\**\WindowsNoEditor\**
+
+🎯 Why this version will NOT randomly break
