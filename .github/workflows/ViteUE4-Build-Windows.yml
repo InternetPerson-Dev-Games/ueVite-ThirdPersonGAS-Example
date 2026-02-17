@@ -81,6 +81,17 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($cfg)) { $cfg = "Development" }
           echo "BUILD_CONFIG=$cfg" >> $env:GITHUB_ENV
 
+
+      # -------------------------------------------------
+      # Build Editor (REQUIRED FOR COOKING)
+      # -------------------------------------------------
+      - name: Build UE4 Editor
+        shell: cmd
+        run: |
+          X:
+          cd \
+          Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -WaitMutex -NoHotReload
+
       - name: Build Game
         shell: cmd
         run: |
