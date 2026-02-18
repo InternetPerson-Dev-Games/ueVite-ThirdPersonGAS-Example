@@ -1,3 +1,30 @@
+This is a bit of a "catch-22." You want RTXGI built because it's part of your game, but the Editor is crashing during the cook because it can't find the RTXGI module.
+
+The issue is that while you are building the Editor executable, the Unreal Build Tool isn't automatically compiling the Plugin DLLs unless they are properly referenced or the plugin source is in a location where the compiler expects it.
+The Diagnosis
+
+The log shows: Unable to load module 'RTXGI' - 0 instances found.
+This means even though the code might be there, the compiled binary (.dll) for the RTXGI plugin does not exist in your Binaries/Win64 folder.
+The Fix: Explicitly Build the Plugin
+
+We need to tell the compiler to build the RTXGI target specifically before we start the cook. I've updated the script to include an explicit build command for the RTXGI module.
+YAML
+
+      - name: Build UE4 Editor and RTXGI
+        shell: cmd
+        run: |
+          X:
+          cd \
+          :: 1. Build the Editor first
+          Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -WaitMutex -NoHotReload
+          
+          :: 2. FORCE build the RTXGI plugin specifically so the DLL exists for the cook
+          :: This assumes the plugin source is in Engine/Plugins/Runtime/Nvidia/RTXGI
+          Engine\Build\BatchFiles\Build.bat RTXGI Win64 Development -WaitMutex -NoHotReload
+
+Full Script with Plugin Compilation Fix
+YAML
+
 name: UE4 Optimized Build (Windows)
 
 on:
@@ -61,14 +88,14 @@ jobs:
           cd \
           GenerateProjectFiles.bat
 
-      # --- CRITICAL MISSING STEP: Build AutomationTool ---
-      - name: Build Unreal Automation Tool (UAT)
+      - name: Build Automation Tool & Core Tools
         shell: cmd
         run: |
           X:
-          cd \Engine\Source\Programs\AutomationTool
-          :: Build UAT using MSBuild (standard for UE4 source builds)
-          "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" AutomationTool.csproj /p:Configuration=Development /p:Platform=AnyCPU
+          :: Build UAT
+          "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" Engine\Source\Programs\AutomationTool\AutomationTool.csproj /p:Configuration=Development /p:Platform=AnyCPU
+          :: Build Shader Workers (Required for RTXGI shaders)
+          Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -WaitMutex
 
       - name: Checkout Game Project
         uses: actions/checkout@v4
@@ -84,23 +111,17 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($cfg)) { $cfg = "Development" }
           echo "BUILD_CONFIG=$cfg" >> $env:GITHUB_ENV
 
-      - name: Build Core Engine Tools
+      - name: Build UE4 Editor & RTXGI Plugin
         shell: cmd
         run: |
           X:
           cd \
-          :: ShaderCompileWorker is required for cooking/RTXGI
-          Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -WaitMutex
-          Engine\Build\BatchFiles\Build.bat UnrealPak Win64 Development -WaitMutex
-
-      - name: Build UE4 Editor
-        shell: cmd
-        run: |
-          X:
-          cd \
+          :: Build Editor
           Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -WaitMutex -NoHotReload
+          :: Build the specific RTXGI module if it exists in the source
+          if exist X:\Engine\Plugins\Runtime\Nvidia\RTXGI Engine\Build\BatchFiles\Build.bat RTXGI Win64 Development -WaitMutex -NoHotReload
 
-      - name: Build Game
+      - name: Build Game Binaries
         shell: cmd
         run: |
           X:
@@ -133,8 +154,6 @@ jobs:
           subst X: "%GITHUB_WORKSPACE%\ue"
           mkdir build_logs
           dir X:\Engine\Binaries\Win64\ > build_logs\binaries_list.txt
-          dir X:\Engine\Binaries\DotNET\ > build_logs\dotnet_binaries_list.txt
-          if exist X:\Engine\Plugins\Runtime\Nvidia\RTXGI (echo RTXGI_FOUND > build_logs\rtxgi_check.txt) else (echo RTXGI_MISSING > build_logs\rtxgi_check.txt)
           if exist X:\Engine\Programs\AutomationTool\Saved\Logs (xcopy /s /y X:\Engine\Programs\AutomationTool\Saved\Logs\* build_logs\)
           if exist X:\Engine\Programs\AutomationTool\Saved\Cook*.txt (xcopy /y X:\Engine\Programs\AutomationTool\Saved\Cook*.txt build_logs\)
 
