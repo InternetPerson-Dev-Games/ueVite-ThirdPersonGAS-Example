@@ -7,6 +7,23 @@ on:
 
 jobs:
   build:
+    # NOTE:
+    # This workflow is intended for LINUX ONLY.
+    # Linux uses the lld linker, which is stricter than MSVC on Windows.
+    # Missing Unreal log-category definitions (e.g. LogAbilities)
+    # will FAIL the link step on Linux but may appear to work on Windows.
+    #
+    # If you encounter:
+    #   ld.lld: error: undefined symbol: LogAbilities
+    #
+    # The fix is to ensure:
+    #   DECLARE_LOG_CATEGORY_EXTERN(LogAbilities, Log, All);
+    # exists in a header, AND
+    #   DEFINE_LOG_CATEGORY(LogAbilities);
+    # exists in EXACTLY ONE .cpp file.
+    #
+    # This is a known Linux-only Unreal Engine linker behavior.
+
     runs-on: blacksmith-4vcpu-ubuntu-2204
 
     steps:
@@ -38,6 +55,9 @@ jobs:
         free -h
         df -h
 
+    # -------------------------------------------------
+    # Enable swap (required for UE4 on Linux)
+    # -------------------------------------------------
     - name: Enable swap (16GB)
       run: |
         sudo fallocate -l 16G /swapfile
@@ -45,7 +65,7 @@ jobs:
         sudo mkswap /swapfile
         sudo swapon /swapfile
         free -h
-    
+
     # -------------------------------------------------
     # Install UE4 Linux dependencies
     # -------------------------------------------------
@@ -79,7 +99,12 @@ jobs:
         cd ue
         ./Setup.sh
         ./GenerateProjectFiles.sh
+
+        # NOTE:
+        # Parallel builds can cause OOM on CI runners.
+        # If you see random "OtherCompilationError", reduce -j.
         make -j$(nproc) VERBOSE=1 | tee ue4-build.log
+
         df -h
 
     # -------------------------------------------------
@@ -112,7 +137,6 @@ jobs:
         set -o pipefail
 
         UPROJECT=$(find "$GITHUB_WORKSPACE/project" -name "*.uproject" | head -n 1)
-
         if [ -z "$UPROJECT" ]; then
           echo "UPROJECT NOT FOUND!"
           exit 1
