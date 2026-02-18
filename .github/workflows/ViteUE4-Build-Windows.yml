@@ -83,12 +83,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($cfg)) { $cfg = "Development" }
           echo "BUILD_CONFIG=$cfg" >> $env:GITHUB_ENV
 
-      - name: Build UE4 Editor (Including RTXGI)
+      - name: Build UE4 Editor
         shell: cmd
         run: |
           X:
           cd \
-          :: Building the Editor target ensures all enabled plugins are compiled
           Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -WaitMutex -NoHotReload
 
       - name: Build Game
@@ -103,8 +102,6 @@ jobs:
         run: |
           X:
           cd \
-          :: Added -nullrhi to prevent GPU initialization crashes
-          :: Added -nocompile to skip redundant compilation checks
           Engine\Build\BatchFiles\RunUAT.bat BuildCookRun ^
             -project="%UPROJECT%" ^
             -noP4 -platform=Win64 -clientconfig=%BUILD_CONFIG% ^
@@ -121,16 +118,18 @@ jobs:
 
       - name: Collect Logs on Failure
         if: failure()
-        shell: powershell
+        shell: cmd
         run: |
-          New-Item -ItemType Directory -Force -Path "build_logs"
+          :: Re-map drive X: because the environment is fresh for this step
+          subst X: "%GITHUB_WORKSPACE%\ue"
+          mkdir build_logs
           dir X:\Engine\Binaries\Win64\ > build_logs\binaries_list.txt
-          if (Test-Path "X:\Engine\Programs\AutomationTool\Saved\Logs") {
-            Copy-Item -Path "X:\Engine\Programs\AutomationTool\Saved\Logs\*" -Destination "build_logs\" -Recurse
-          }
-          if (Test-Path "X:\Engine\Programs\AutomationTool\Saved\Cook*.txt") {
-            Copy-Item -Path "X:\Engine\Programs\AutomationTool\Saved\Cook*.txt" -Destination "build_logs\"
-          }
+          
+          :: Check if RTXGI source actually exists
+          if exist X:\Engine\Plugins\Runtime\Nvidia\RTXGI (echo RTXGI_FOUND > build_logs\rtxgi_check.txt) else (echo RTXGI_MISSING > build_logs\rtxgi_check.txt)
+          
+          if exist X:\Engine\Programs\AutomationTool\Saved\Logs (xcopy /s /y X:\Engine\Programs\AutomationTool\Saved\Logs\* build_logs\)
+          if exist X:\Engine\Programs\AutomationTool\Saved\Cook*.txt (xcopy /y X:\Engine\Programs\AutomationTool\Saved\Cook*.txt build_logs\)
 
       - name: Upload Error Logs
         if: failure()
