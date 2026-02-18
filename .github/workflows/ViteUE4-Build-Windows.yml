@@ -22,14 +22,6 @@ jobs:
       OUTPUT_DIR: ${{ github.workspace }}\project\release
 
     steps:
-      - name: Maximize Disk Space
-        shell: powershell
-        run: |
-          Write-Host "Cleaning up disk space..."
-          Remove-Item -Recurse -Force "C:\Program Files\dotnet" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\Program Files (x86)\Microsoft SDKs" -ErrorAction SilentlyContinue
-          Remove-Item -Recurse -Force "C:\android" -ErrorAction SilentlyContinue
-
       - name: Enable long paths
         run: |
           reg add "HKLM\SYSTEM\CurrentControlSet\Control\FileSystem" /v LongPathsEnabled /t REG_DWORD /d 1 /f
