@@ -34,11 +34,18 @@ jobs:
         sudo apt-get autoremove -y || true
         sudo docker image prune --all --force || true
         sudo swapoff -a || true
-        sudo rm -f /mnt/swapfile || true
         sudo rm -rf /usr/lib/jvm /usr/share/swift /opt/hostedtoolcache
         free -h
         df -h
 
+    - name: Enable swap (16GB)
+      run: |
+        sudo fallocate -l 16G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        free -h
+    
     # -------------------------------------------------
     # Install UE4 Linux dependencies
     # -------------------------------------------------
