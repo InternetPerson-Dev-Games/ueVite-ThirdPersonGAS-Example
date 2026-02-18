@@ -90,6 +90,33 @@ jobs:
           cd \
           Engine\Build\BatchFiles\Build.bat ActionRPG Win64 %BUILD_CONFIG% -Project="%UPROJECT%" -NoHotReload -NoDebugInfo
 
+
+          - name: Pre-Cook Cleanup & Plugin Fix
+          shell: powershell
+          run: |
+            # If RTXGI is missing from the engine but requested by the project, 
+            # this script disables it so the cook can proceed.
+            $uproj = Get-Content "${{ env.UPROJECT }}" -Raw | ConvertFrom-Json
+            if ($uproj.Plugins) {
+                $uproj.Plugins | Where-Object { $_.Name -eq "RTXGI" } | ForEach-Object { $_.Enabled = $false }
+                $uproj | ConvertTo-Json -Depth 10 | Set-Content "${{ env.UPROJECT }}"
+                Write-Host "Disabled RTXGI plugin to prevent Cook failure."
+            }
+
+      - name: Package WindowsNoEditor
+        shell: cmd
+        run: |
+          X:
+          cd \
+          # We add -iterativecooking and -Compressed to help with speed/space
+          # We also ensure -nocompileeditor is used since we just built it
+          Engine\Build\BatchFiles\RunUAT.bat BuildCookRun ^
+            -project="%UPROJECT%" ^
+            -noP4 -platform=Win64 -clientconfig=%BUILD_CONFIG% ^
+            -cook -allmaps -stage -pak -archive ^
+            -archivedirectory="%OUTPUT_DIR%" ^
+            -unattended -UTF8Output -ni
+
       - name: Package WindowsNoEditor
         shell: cmd
         run: |
