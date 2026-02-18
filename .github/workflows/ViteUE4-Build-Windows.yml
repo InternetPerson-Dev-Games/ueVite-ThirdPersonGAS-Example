@@ -1,17 +1,3 @@
-This guide reveals why your CI is failing: the RTXGI and PhysX features in this specific fork require a very specific environment and a BuildConfiguration.xml file to point UBT to the correct SDKs.
-
-In a CI environment, UBT often defaults to the oldest SDK it finds. Since you are using a custom engine with RT effects enabled by default, if UBT doesn't have the exact Windows SDK version (10.0.26100.0), it fails to link the RTXGI modules, leading to the "Unable to load module" error.
-The Fix Strategy
-
-    Force the SDK: We will use PowerShell to create that BuildConfiguration.xml on the fly in the runner's AppData folder.
-
-    Standardize MSVC: Since the runner is windows-2019, we will target the latest available SDK there (or install the one requested).
-
-    Build Target: We need to build the Development Editor specifically.
-
-Updated Full CI Script
-YAML
-
 name: UE4 Optimized Build (Windows)
 
 on:
