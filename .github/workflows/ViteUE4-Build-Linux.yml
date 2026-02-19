@@ -7,32 +7,55 @@ on:
 
 jobs:
   build:
-    # NOTE:
+    # =================================================
+    # NOTE: LINUX-ONLY WORKFLOW
+    # =================================================
     # This workflow is intended for LINUX ONLY.
-    # Linux uses the lld linker, which is stricter than MSVC on Windows.
-    # Missing Unreal log-category definitions (e.g. LogAbilities)
-    # will FAIL the link step on Linux but may appear to work on Windows.
     #
-    # If you encounter:
-    #   ld.lld: error: undefined symbol: LogAbilities
+    # Linux uses clang + lld, which is STRICTER than
+    # MSVC on Windows.
     #
-    # The fix is to ensure:
-    #   DECLARE_LOG_CATEGORY_EXTERN(LogAbilities, Log, All);
-    # exists in a header, AND
-    #   DEFINE_LOG_CATEGORY(LogAbilities);
-    # exists in EXACTLY ONE .cpp file.
+    # Common Linux-only Unreal failures:
+    # -----------------------------------
+    # 1. Missing log category definitions:
+    #      ld.lld: error: undefined symbol: LogAbilities
     #
-    # This is a known Linux-only Unreal Engine linker behavior.
+    #    Fix:
+    #      - DECLARE_LOG_CATEGORY_EXTERN(LogAbilities, Log, All);
+    #        must exist in a header
+    #      - DEFINE_LOG_CATEGORY(LogAbilities);
+    #        must exist in EXACTLY ONE .cpp
+    #
+    #    Windows may "work" without this. Linux will not.
+    #
+    # 2. Random "OtherCompilationError":
+    #      Usually NOT a code error.
+    #      Almost always CI resource limits:
+    #        - OOM killer
+    #        - runner watchdog timeout
+    #        - disk exhaustion
+    #
+    # This CI adds:
+    #   - Large swap
+    #   - Reduced parallelism
+    #   - Extra logging to detect OOM/timeouts
+    #
+    # =================================================
 
     runs-on: blacksmith-4vcpu-ubuntu-2204
 
     steps:
 
     # -------------------------------------------------
-    # Display initial disk usage
+    # Show system info early (helps debug CI limits)
     # -------------------------------------------------
-    - name: Disk Usage Before Cleanup
-      run: df -h
+    - name: System Info
+      run: |
+        uname -a
+        lsb_release -a || true
+        nproc
+        free -h
+        df -h
 
     # -------------------------------------------------
     # Aggressive cleanup to free disk space
@@ -56,15 +79,16 @@ jobs:
         df -h
 
     # -------------------------------------------------
-    # Enable swap (required for UE4 on Linux)
+    # Enable LARGE swap (critical for UE4 on Linux CI)
     # -------------------------------------------------
-    - name: Enable swap (16GB)
+    - name: Enable swap (32GB)
       run: |
-        sudo fallocate -l 16G /swapfile
+        sudo fallocate -l 32G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
         free -h
+        swapon --show
 
     # -------------------------------------------------
     # Install UE4 Linux dependencies
@@ -91,24 +115,34 @@ jobs:
         token: ${{ secrets.UE_PAT }}
 
     # -------------------------------------------------
-    # Setup UE4 Engine (official Linux instructions)
+    # Setup UE4 Engine (Linux)
     # -------------------------------------------------
     - name: Setup UE4 Engine
       run: |
         set -o pipefail
         cd ue
+
+        # Clear kernel logs so OOM is easy to spot later
+        sudo dmesg --clear || true
+
         ./Setup.sh
         ./GenerateProjectFiles.sh
 
         # NOTE:
-        # Parallel builds can cause OOM on CI runners.
-        # If you see random "OtherCompilationError", reduce -j.
-        make -j$(nproc) VERBOSE=1 | tee ue4-build.log
+        # Using FULL CPU parallelism (-j$(nproc))
+        # often causes OOM on CI.
+        #
+        # If this still fails, reduce to -j1.
+        make -j2 VERBOSE=1 | tee ue4-build.log
 
         df -h
+        free -h
+
+        # Dump kernel messages in case the build was killed
+        sudo dmesg | tail -n 100 || true
 
     # -------------------------------------------------
-    # Upload UE4 Build Logs (always, even on failure)
+    # Upload UE4 Build Logs (always)
     # -------------------------------------------------
     - name: Upload UE4 Build Logs
       if: always()
@@ -130,11 +164,13 @@ jobs:
         lfs: true
 
     # -------------------------------------------------
-    # Build Game Target (Minimal Linux Server)
+    # Build Game Target (Linux Server Only)
     # -------------------------------------------------
     - name: Build Game Target
       run: |
         set -o pipefail
+
+        sudo dmesg --clear || true
 
         UPROJECT=$(find "$GITHUB_WORKSPACE/project" -name "*.uproject" | head -n 1)
         if [ -z "$UPROJECT" ]; then
@@ -143,7 +179,7 @@ jobs:
         fi
 
         echo "Using uproject: $UPROJECT"
-        echo "Building minimal engine + game target for Linux..."
+        echo "Building Linux server target..."
 
         ue/Engine/Build/BatchFiles/Linux/Build.sh \
           ActionRPGServer Linux Development \
@@ -151,7 +187,9 @@ jobs:
           -NoHotReload \
           -TargetType=Server | tee game-build.log
 
-        echo "Build completed successfully."
+        free -h
+        df -h
+        sudo dmesg | tail -n 100 || true
 
     # -------------------------------------------------
     # Upload Game Build Logs
@@ -165,7 +203,7 @@ jobs:
           game-build.log
 
     # -------------------------------------------------
-    # Optional: Cleanup engine editor binaries to save space
+    # Cleanup editor binaries to save space
     # -------------------------------------------------
     - name: Cleanup Engine Binaries
       run: |
