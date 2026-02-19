@@ -74,7 +74,6 @@ jobs:
           X:
           "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" Engine\Source\Programs\AutomationTool\AutomationTool.csproj /p:Configuration=Development /p:Platform=AnyCPU
           Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -WaitMutex
-          Engine\Build\BatchFiles\Build.bat UnrealPak Win64 Development -WaitMutex
 
       - name: Checkout Game Project
         uses: actions/checkout@v4
@@ -83,32 +82,41 @@ jobs:
           path: project
           lfs: true
 
-      - name: Build Editor with RTXGI
+      - name: Build Editor
         shell: cmd
         run: |
           X:
-          :: We build the Editor target. Because RTXGI is an Engine plugin, 
-          :: UBT will discover the source and compile it into the Engine's binary folder.
+          :: Build the Editor. This will compile the RTXGI Source.
           Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -Project="%UPROJECT%" -WaitMutex -NoHotReload
+
+      - name: Link RTXGI Binaries
+        shell: cmd
+        run: |
+          X:
+          :: IMPORTANT: Copy NVIDIA and Plugin DLLs to the main Binary folder
+          :: This fixes the 0xC0000135 (DLL Not Found) error.
+          xcopy /y /s "X:\Engine\Plugins\Runtime\Nvidia\RTXGI\Binaries\Win64\*.dll" "X:\Engine\Binaries\Win64\"
+          if exist "X:\Engine\Plugins\Runtime\Nvidia\RTXGI\Source\ThirdParty\*.dll" (
+            xcopy /y /s "X:\Engine\Plugins\Runtime\Nvidia\RTXGI\Source\ThirdParty\*.dll" "X:\Engine\Binaries\Win64\"
+          )
 
       - name: Build Game Binaries
         shell: cmd
         run: |
           X:
-          Engine\Build\BatchFiles\Build.bat ActionRPG Win64 ${{ github.event.inputs.buildConfig || 'Development' }} -Project="%UPROJECT%" -WaitMutex -NoHotReload
+          Engine\Build\BatchFiles\Build.bat ActionRPG Win64 ${{ github.event.inputs.buildConfig || 'Development' }} -Project="%UPROJECT%" -NoHotReload
 
       - name: Package Project
         shell: cmd
         run: |
           X:
-          :: -nullrhi is essential here because your fork has RT enabled by default.
-          :: Without a GPU, the Cooker will crash unless we use the Null RHI.
+          :: Using -nullrhi and -nocompile to force the use of our pre-built Editor DLLs
           Engine\Build\BatchFiles\RunUAT.bat BuildCookRun ^
             -project="%UPROJECT%" ^
             -noP4 -platform=Win64 -clientconfig=${{ github.event.inputs.buildConfig || 'Development' }} ^
             -cook -allmaps -stage -pak -archive ^
             -archivedirectory="%OUTPUT_DIR%" ^
-            -unattended -nullrhi -ni -nocompileeditor
+            -unattended -nullrhi -ni -nocompile -nocompileeditor
 
       - name: Upload Artifacts
         if: success()
@@ -123,9 +131,10 @@ jobs:
         run: |
           subst X: "%GITHUB_WORKSPACE%\ue"
           mkdir build_logs
-          dir X:\Engine\Binaries\Win64\UE4Editor-RTXGI* /s > build_logs\rtxgi_dll_location.txt
+          echo "Checking for compiled DLLs..." > build_logs\dll_check.txt
+          dir X:\Engine\Binaries\Win64\UE4Editor-RTXGI* >> build_logs\dll_check.txt
+          dir X:\Engine\Binaries\Win64\GFSDK* >> build_logs\dll_check.txt
           xcopy /s /y X:\Engine\Programs\AutomationTool\Saved\Logs\* build_logs\
-          if exist X:\Engine\Programs\AutomationTool\Saved\Cook*.txt xcopy /y X:\Engine\Programs\AutomationTool\Saved\Cook*.txt build_logs\
 
       - name: Upload Error Logs
         if: failure()
