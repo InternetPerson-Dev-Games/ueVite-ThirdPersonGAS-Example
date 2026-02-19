@@ -46,8 +46,6 @@ jobs:
           $xmlPath = "$env:AppData\Unreal Engine\UnrealBuildTool\BuildConfiguration.xml"
           $directory = [System.IO.Path]::GetDirectoryName($xmlPath)
           if (!(Test-Path $directory)) { New-Item -ItemType Directory -Force -Path $directory }
-          
-          # Forcing the SDK and Toolchain as per your guide
           $xmlContent = @"
           <?xml version="1.0" encoding="utf-8" ?>
           <Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
@@ -62,7 +60,6 @@ jobs:
         shell: cmd
         run: |
           X:
-          :: Using 'N' to skip overrides as per your guide
           echo N | Engine\Binaries\DotNET\GitDependencies.exe --exclude=Mac --exclude=Linux --exclude=Android --exclude=IOS
 
       - name: Generate Project Files
@@ -70,13 +67,6 @@ jobs:
         run: |
           X:
           GenerateProjectFiles.bat
-
-      - name: Build UAT and Shader Workers
-        shell: cmd
-        run: |
-          X:
-          "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" Engine\Source\Programs\AutomationTool\AutomationTool.csproj /p:Configuration=Development /p:Platform=AnyCPU
-          Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -WaitMutex
 
       - name: Checkout Game Project
         uses: actions/checkout@v4
@@ -92,14 +82,25 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($cfg)) { $cfg = "Development" }
           echo "BUILD_CONFIG=$cfg" >> $env:GITHUB_ENV
 
-      - name: Force Build RTXGI and Editor
+      - name: Build UAT & ShaderWorkers
         shell: cmd
         run: |
           X:
-          :: 1. Specifically build the RTXGI module DLLs
-          Engine\Build\BatchFiles\Build.bat RTXGI Win64 Development -Project="%UPROJECT%" -WaitMutex
-          
-          :: 2. Build the Editor
+          "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe" Engine\Source\Programs\AutomationTool\AutomationTool.csproj /p:Configuration=Development /p:Platform=AnyCPU
+          Engine\Build\BatchFiles\Build.bat ShaderCompileWorker Win64 Development -WaitMutex
+
+      - name: Compile RTXGI Plugin Manually
+        shell: cmd
+        run: |
+          X:
+          :: Use RunUAT to build the plugin specifically. This generates the missing DLLs.
+          Engine\Build\BatchFiles\RunUAT.bat BuildPlugin -Plugin="X:\Engine\Plugins\Runtime\Nvidia\RTXGI\RTXGI.uplugin" -Package="%TEMP%\RTXGI" -Rocket -unattended
+
+      - name: Build Editor
+        shell: cmd
+        run: |
+          X:
+          :: Now build the Editor. Since we built the plugin above, it should find the binaries.
           Engine\Build\BatchFiles\Build.bat UE4Editor Win64 Development -Project="%UPROJECT%" -WaitMutex -NoHotReload
 
       - name: Build Game Binaries
@@ -112,7 +113,7 @@ jobs:
         shell: cmd
         run: |
           X:
-          :: We remove -nocompile to let UAT double-check the RTXGI binaries
+          :: We use -nullrhi and ensure we aren't skipping the build in case DLLs need a final link
           Engine\Build\BatchFiles\RunUAT.bat BuildCookRun ^
             -project="%UPROJECT%" ^
             -noP4 -platform=Win64 -clientconfig=%BUILD_CONFIG% ^
@@ -126,8 +127,7 @@ jobs:
         run: |
           subst X: "%GITHUB_WORKSPACE%\ue"
           mkdir build_logs
-          :: Let's see if the DLL actually exists now
-          dir X:\Engine\Plugins\Runtime\Nvidia\RTXGI\Binaries\Win64\ > build_logs\rtxgi_binaries.txt
+          dir X:\Engine\Plugins\Runtime\Nvidia\RTXGI\Binaries\Win64\ > build_logs\rtxgi_binaries_list.txt
           xcopy /s /y X:\Engine\Programs\AutomationTool\Saved\Logs\* build_logs\
           xcopy /y X:\Engine\Programs\AutomationTool\Saved\Cook*.txt build_logs\
 
